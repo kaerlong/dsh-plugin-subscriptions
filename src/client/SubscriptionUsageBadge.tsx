@@ -222,17 +222,33 @@ export function compactSegment(d: ProviderUsageDisplay, model?: string, t: Trans
       })}${freshness}`
     }
     const parts = matching.slice(0, 2).map(w => {
-      const label = w.resetsAt !== undefined && w.resetsAt <= Date.now() ? t('quotaExpiredWindow')
-        : w.kind === 'weekly' ? t('usageWeekly')
-        : w.kind === 'session' ? t('usageFiveHourLimit') : t('usageWindow')
-      return `${label} ${quotaText(w.usedPercent, mode, t)}`
+      const percent = quotaPercent(w.usedPercent, mode)
+      return percent === undefined ? t('quotaUnknown') : `${percent}%`
     })
-    return `${prefix} ${parts.join(' · ')}${freshness}`
+    return `${parts.join(', ')}${freshness}`
   }
   const parts = windows.slice(0, 2).map(w => `${w.resetsAt !== undefined && w.resetsAt <= Date.now() ? t('quotaExpiredWindow') : windowLabel(w)} ${quotaText(w.usedPercent, mode, t)}`)
   if (windows.length > 2) parts.push(`+${windows.length - 2}`)
   const credits = d.provider === 'codex' ? creditBalanceText(account.usage?.credits, t) : undefined
   return `${prefix} ${parts.join(' · ')}${credits === undefined ? '' : ` · ${credits}`}${freshness}`
+}
+
+/** Detailed hover tooltip matching the compact pill, preserving window names when the pill shows bare percentages. */
+export function compactTooltip(d: ProviderUsageDisplay, model?: string, t: Translate = fallbackTranslate, mode: QuotaDisplayMode = 'used'): string {
+  const base = t('usageBadgeTitle')
+  if (d.provider !== 'antigravity' || d.accounts.length > 1) return base
+  const account = pillAccountOf(d)
+  if (!account || model === undefined) return base
+  const matching = account.windows.filter(w => antigravityQuotaApplies(w.scope, model))
+  if (matching.length === 0) return base
+  const freshness = account.usage && quotaIsStale(account.usage) ? ` · ${t('quotaStale')}` : ''
+  const parts = matching.slice(0, 2).map(w => {
+    const label = w.resetsAt !== undefined && w.resetsAt <= Date.now() ? t('quotaExpiredWindow')
+      : w.kind === 'weekly' ? t('usageWeekly')
+      : w.kind === 'session' ? t('usageFiveHourLimit') : t('usageWindow')
+    return `${label} ${quotaText(w.usedPercent, mode, t)}`
+  })
+  return `${base} · ${d.name} · ${parts.join(' · ')}${freshness}`
 }
 
 type ModelSelection = { provider: string; model: string }
@@ -534,6 +550,7 @@ export function SubscriptionUsageBadge({ rpc, currentModel, t }: SubscriptionUsa
   // badge shows (a retained subscription when the current model is not one).
   const expanded = expandedDisplays(displays, badgeSelection?.provider)
   const title = translate('usageBadgeTitle')
+  const tooltip = compactTooltip(collapsed[0]!, badgeSelection?.model, translate, quotaMode)
 
   const toggle = (): void => {
     const next = !open
@@ -550,8 +567,8 @@ export function SubscriptionUsageBadge({ rpc, currentModel, t }: SubscriptionUsa
         style={{ ...styles.pill, ...(hover || open ? styles.pillActive : {}) }}
         aria-haspopup="dialog"
         aria-expanded={open}
-        aria-label={`${title} · ${label}`}
-        title={title}
+        aria-label={tooltip === title ? `${title} · ${label}` : tooltip}
+        title={tooltip}
         onMouseEnter={() => { setHover(true) }}
         onMouseLeave={() => { setHover(false) }}
         onClick={toggle}

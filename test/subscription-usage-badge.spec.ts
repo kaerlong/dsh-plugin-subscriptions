@@ -11,7 +11,7 @@ const css = registerHooks({ load(url, context, nextLoad) {
     ? { format: 'module', source: 'export default {}', shortCircuit: true }
     : nextLoad(url, context)
 } })
-const { AccountWindows, CodexExhaustionNotice, compactSegment, createCurrentModelReader, previewWindows,
+const { AccountWindows, CodexExhaustionNotice, compactSegment, compactTooltip, createCurrentModelReader, previewWindows,
   collapsedDisplays, expandedDisplays, retainSubscriptionSelection, usageBadgeIcon } = await import('../src/client/SubscriptionUsageBadge.js')
 const { ImageGenerateToolview } = await import('../src/client/ImageGenerateToolview.js')
 const { VideoGenerateToolview } = await import('../src/client/VideoGenerateToolview.js')
@@ -125,21 +125,22 @@ test('native shared account panel follows used/remaining quota display mode desp
     assert.equal((usedHtml.match(/role="progressbar"/g) ?? []).length, 4)
     for (const percent of [27, 7, 77, 0]) assert.ok(usedHtml.includes(translate('quotaUsedPercent', { percent })))
     assert.ok(!usedHtml.includes('gemini-4-argon-') && !usedHtml.includes('<details'))
-    assert.equal(compactSegment(display('antigravity', shared), 'gemini-4-argon', translate),
-      `Antigravity · ${translate('quotaDefaultAccount')} ${translate('usageWeekly')} ${translate('quotaUsedPercent', { percent: 27 })} · ${translate('usageFiveHourLimit')} ${translate('quotaUsedPercent', { percent: 7 })}`)
+    assert.equal(compactSegment(display('antigravity', shared), 'gemini-4-argon', translate), '27%, 7%')
+    assert.equal(compactTooltip(display('antigravity', shared), 'gemini-4-argon', translate),
+      `${translate('usageBadgeTitle')} · Antigravity · ${translate('usageWeekly')} ${translate('quotaUsedPercent', { percent: 27 })} · ${translate('usageFiveHourLimit')} ${translate('quotaUsedPercent', { percent: 7 })}`)
 
     const remainingHtml = renderToStaticMarkup(createElement(AccountWindows, {
       windows: filtered, model: 'gemini-4-argon', provider: 'antigravity', translate, mode: 'remaining',
     }))
     for (const percent of [73, 93, 23, 100]) assert.ok(remainingHtml.includes(translate('quotaRemainingPercent', { percent })))
-    assert.equal(compactSegment(display('antigravity', shared), 'gemini-4-argon', translate, 'remaining'),
-      `Antigravity · ${translate('quotaDefaultAccount')} ${translate('usageWeekly')} ${translate('quotaRemainingPercent', { percent: 73 })} · ${translate('usageFiveHourLimit')} ${translate('quotaRemainingPercent', { percent: 93 })}`)
+    assert.equal(compactSegment(display('antigravity', shared), 'gemini-4-argon', translate, 'remaining'), '73%, 93%')
   }
 })
 
 test('Antigravity compact readout selects exact current model, not the entire catalog', () => {
   const d = display('antigravity', [...windows, { kind: 'weekly', scope: 'gemini-model-59', usedPercent: 81 }])
-  assert.equal(compactSegment(d, 'gemini-model-59'), 'Antigravity · Default account Window 59% used · Weekly 81% used')
+  assert.equal(compactSegment(d, 'gemini-model-59'), '59%, 81%')
+  assert.equal(compactTooltip(d, 'gemini-model-59'), 'Subscription usage · Antigravity · Window 59% used · Weekly 81% used')
   assert.equal(compactSegment(d), 'Antigravity · Default account 60 model quotas')
   assert.equal(compactSegment(d, 'missing'), 'Antigravity · Default account Current model quota unavailable')
   assert.ok(compactSegment(d, 'gemini-model-1').length < 90)
