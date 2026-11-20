@@ -185,12 +185,22 @@ export function windowLabel(w: UsageWindow): string {
   return `${Math.max(1, minutes)}m`
 }
 
+/** When a plan reports a separate Gemini 4 Argon bucket, Argon uses it instead of the shared Gemini Models bucket. */
+function matchingAntigravityWindows(windows: readonly UsageWindow[], model: string): UsageWindow[] {
+  const dedicated = /^gemini-4-argon(?:-|$)/.test(model)
+    ? windows.filter(w => antigravityQuotaScope(w.scope) === 'Gemini 4 Argon')
+    : []
+  return dedicated.length > 0 ? dedicated : windows.filter(w => antigravityQuotaApplies(w.scope, model))
+}
+
 /** Keep model quotas separate: matching percentages do not imply a shared pool. */
 export function prioritizeWindows(windows: readonly UsageWindow[], model?: string, provider?: SubscriptionProvider): UsageWindow[] {
-  return model === undefined ? [...windows] : [
-    ...windows.filter(w => provider === 'antigravity' ? antigravityQuotaApplies(w.scope, model) : w.scope === model),
-    ...windows.filter(w => provider === 'antigravity' ? !antigravityQuotaApplies(w.scope, model) : w.scope !== model),
-  ]
+  if (model === undefined) return [...windows]
+  if (provider === 'antigravity') {
+    const matching = new Set(matchingAntigravityWindows(windows, model))
+    return [...windows.filter(w => matching.has(w)), ...windows.filter(w => !matching.has(w))]
+  }
+  return [...windows.filter(w => w.scope === model), ...windows.filter(w => w.scope !== model)]
 }
 
 /** Small previews keep a live model catalog from taking over the dialog. */
@@ -199,7 +209,7 @@ export function previewWindows(windows: readonly UsageWindow[], model?: string, 
   const ordered = prioritizeWindows(windows, model, provider)
   // Antigravity has many model-specific quotas: preview only the current model.
   const limit = provider === 'antigravity'
-    ? Math.min(2, model === undefined ? 0 : windows.filter(w => antigravityQuotaApplies(w.scope, model)).length)
+    ? Math.min(2, model === undefined ? 0 : matchingAntigravityWindows(windows, model).length)
     : WINDOW_PREVIEW_LIMIT
   return { shown: ordered.slice(0, limit), hidden: ordered.slice(limit) }
 }
@@ -215,7 +225,7 @@ export function compactSegment(d: ProviderUsageDisplay, model?: string, t: Trans
   const prefix = `${d.name} · ${source}`
   if (windows.length === 0) return `${prefix} · ${quotaUnavailableText(account.usage, account.loadFailed === true, t) ?? t('usageNoVisibleModels')}`
   if (d.provider === 'antigravity') {
-    const matching = model === undefined ? [] : windows.filter(w => antigravityQuotaApplies(w.scope, model))
+    const matching = model === undefined ? [] : matchingAntigravityWindows(windows, model)
     if (matching.length === 0) {
       return `${prefix} ${t(model === undefined ? 'usageBadgeModelCount' : 'usageBadgeModelUnavailable', {
         count: new Set(windows.map(w => w.scope).filter(Boolean)).size,
@@ -239,7 +249,7 @@ export function compactTooltip(d: ProviderUsageDisplay, model?: string, t: Trans
   if (d.provider !== 'antigravity' || d.accounts.length > 1) return base
   const account = pillAccountOf(d)
   if (!account || model === undefined) return base
-  const matching = account.windows.filter(w => antigravityQuotaApplies(w.scope, model))
+  const matching = matchingAntigravityWindows(account.windows, model)
   if (matching.length === 0) return base
   const freshness = account.usage && quotaIsStale(account.usage) ? ` · ${t('quotaStale')}` : ''
   const parts = matching.slice(0, 2).map(w => {

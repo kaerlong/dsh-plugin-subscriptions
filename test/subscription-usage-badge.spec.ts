@@ -135,6 +135,14 @@ test('native shared account panel follows used/remaining quota display mode desp
     for (const percent of [73, 93, 23, 100]) assert.ok(remainingHtml.includes(translate('quotaRemainingPercent', { percent })))
     assert.equal(compactSegment(display('antigravity', shared), 'gemini-4-argon', translate, 'remaining'), '73%, 93%')
   }
+  const proWithSeparateArgon: UsageWindow[] = [
+    ...shared,
+    { kind: 'weekly', scope: 'Gemini 4 Argon', usedPercent: 9 },
+  ]
+  assert.equal(compactSegment(display('antigravity', proWithSeparateArgon), 'gemini-4-argon'), '9%')
+  assert.equal(compactTooltip(display('antigravity', proWithSeparateArgon), 'gemini-4-argon'),
+    'Subscription usage · Antigravity · Weekly 9% used')
+  assert.equal(compactSegment(display('antigravity', proWithSeparateArgon), 'gemini-4-neon'), '27%, 7%')
 })
 
 test('Antigravity compact readout selects exact current model, not the entire catalog', () => {
